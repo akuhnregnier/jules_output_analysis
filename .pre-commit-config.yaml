@@ -37,12 +37,12 @@ repos:
             exclude: (__init__|common|specific)\.py$
           - id: jupyter-clean
             name: jupyter-clean
-            entry: clean_ipynb --no-py --no-autoflake --keep-output
+            entry: clean_ipynb --no-py --keep-output
             language: system
             files: \.ipynb$
-            # - id: pytest
-            #   name: pytest
-            #   entry: pytest -v -rs -m "not slow" --ignore-glob='joblib/**/func_code.py'
-            #   pass_filenames: false
-            #   language: system
-            #   verbose: true
+          - id: pytest
+            name: pytest
+            entry: pytest -v -rs -m "not slow" --ignore-glob='joblib/**/func_code.py'
+            pass_filenames: false
+            language: system
+            verbose: true
