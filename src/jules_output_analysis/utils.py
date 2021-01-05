@@ -120,7 +120,7 @@ def find_min_error(x, y):
     return min_error
 
 
-def cube_1d_to_2d(cube):
+def cube_1d_to_2d(cube, temporal_dim="time"):
     """Convert JULES output on 1D grid to 2D grid."""
     land_grid_coord = -1  # The last axis is associated with the spatial domain.
 
@@ -197,8 +197,10 @@ def cube_1d_to_2d(cube):
     lon_dim = n_dim - 1
 
     time_coord_and_dims = []
-    if cube.coords("time") and cube.coord_dims("time"):
-        time_coord_and_dims.append((cube.coord("time"), cube.coord_dims("time")[0]))
+    if cube.coords(temporal_dim) and cube.coord_dims(temporal_dim):
+        time_coord_and_dims.append(
+            (cube.coord(temporal_dim), cube.coord_dims(temporal_dim)[0])
+        )
 
     new_cube = iris.cube.Cube(
         new_data,
