@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-from itertools import product
+
+from enum import Enum
 
 import iris
 import numpy as np
 from joblib import Memory
 from numba import njit
 from sklearn.model_selection import train_test_split
-from wildfires.utils import get_centres
 
 memory = Memory(".cache", verbose=0)
 
@@ -28,6 +28,78 @@ param_dict = {
     "min_samples_split": 2,
     "n_estimators": 100,
 }
+
+PFTs = Enum("PFTs", ["VEG5", "VEG5_ALL", "VEG13", "VEG13_ALL", "NON_VEG"])
+
+pft_names = {
+    PFTs.VEG5: (
+        "Broadleaf trees",
+        "Needleleaf trees",
+        "C3 (temperate) grass",
+        "C4 (tropical) grass",
+        "Shrubs",
+    ),
+    PFTs.VEG13: (
+        "BDT",
+        "BE-Tr",
+        "BE-Te",
+        "NDT",
+        "NET",
+        "C3G",
+        "C3C",
+        "C3P",
+        "C4G",
+        "C4C",
+        "C4P",
+        "SbD",
+        "SbE",
+    ),
+    PFTs.NON_VEG: ("Urban", "Lake", "Bare Soil", "Ice"),
+}
+
+pft_acronyms = {
+    PFTs.VEG5: (
+        "BT",
+        "NT",
+        "C3G",
+        "C4G",
+        "Sb",
+    ),
+    PFTs.VEG13: (
+        "BDT",
+        "BE-Tr",
+        "BE-Te",
+        "NDT",
+        "NET",
+        "C3G",
+        "C3C",
+        "C3P",
+        "C4G",
+        "C4C",
+        "C4P",
+        "SbD",
+        "SbE",
+    ),
+    PFTs.NON_VEG: (
+        "Ub",
+        "Lk",
+        "BS",
+        "Ice",
+    ),
+}
+
+pft_names[PFTs.VEG5_ALL] = tuple(
+    list(pft_names[PFTs.VEG5]) + list(pft_names[PFTs.NON_VEG])
+)
+pft_names[PFTs.VEG13_ALL] = tuple(
+    list(pft_names[PFTs.VEG13]) + list(pft_names[PFTs.NON_VEG])
+)
+pft_acronyms[PFTs.VEG5_ALL] = tuple(
+    list(pft_acronyms[PFTs.VEG5]) + list(pft_acronyms[PFTs.NON_VEG])
+)
+pft_acronyms[PFTs.VEG13_ALL] = tuple(
+    list(pft_acronyms[PFTs.VEG13]) + list(pft_acronyms[PFTs.NON_VEG])
+)
 
 
 def get_mm_indices(master_mask):
@@ -118,111 +190,6 @@ def find_min_error(x, y):
         if error < min_error:
             min_error = error
     return min_error
-
-
-def cube_1d_to_2d(cube, temporal_dim="time"):
-    """Convert JULES output on 1D grid to 2D grid."""
-    land_grid_coord = -1  # The last axis is associated with the spatial domain.
-
-    assert land_grid_coord == -1
-
-    lat_coord = cube.coord("latitude")
-    lon_coord = cube.coord("longitude")
-
-    orig_lats = lat_coord.points.data.ravel()
-    orig_lons = lon_coord.points.data.ravel()
-
-    lat_step = np.unique(np.diff(np.sort(orig_lats)))[1]
-    lon_step = np.unique(np.diff(np.sort(orig_lons)))[1]
-
-    # Use the latitude and longitude steps from above to determine the number of
-    # latitude and longitude steps.
-    n_lat = round(180 / lat_step)
-    n_lon = round(360 / lon_step)
-
-    # Ensure that these represent a regular grid.
-    assert np.isclose(n_lat * lat_step, 180)
-    assert np.isclose(n_lon * lon_step, 360)
-
-    # Create a grid of ..., lat, lon points to match the shape of the given cube.
-    new_shape = tuple(list(cube.shape[:land_grid_coord]) + [n_lat, n_lon])
-
-    # Now convert the 1D data to the 2D array created above, using a mask.
-    mask = np.zeros((n_lat, n_lon), dtype=np.bool_)
-
-    # Pick the grid configuration that best matches the existing grid.
-    grid_lats1 = np.linspace(-90, 90, n_lat, endpoint=False)
-    grid_lons1 = np.linspace(0, 360, n_lon, endpoint=False)
-    grid_lats2 = get_centres(np.linspace(-90, 90, n_lat + 1, endpoint=True))
-    grid_lons2 = get_centres(np.linspace(0, 360, n_lon + 1, endpoint=True))
-
-    unique_orig_lats = np.unique(orig_lats)
-    unique_orig_lons = np.unique(orig_lons)
-
-    if find_min_error(grid_lats1, unique_orig_lats) < find_min_error(
-        grid_lats2, unique_orig_lats
-    ):
-        grid_lats = grid_lats1
-    else:
-        grid_lats = grid_lats2
-
-    if find_min_error(grid_lons1, unique_orig_lons) < find_min_error(
-        grid_lons2, unique_orig_lons
-    ):
-        grid_lons = grid_lons1
-    else:
-        grid_lons = grid_lons2
-
-    mask = get_grid_mask(mask, orig_lats, orig_lons, grid_lats, grid_lons)
-
-    if len(np.squeeze(cube.data).shape) == 1:
-        # Simply assign based on the mask.
-        new_data = np.ma.MaskedArray(np.zeros_like(mask, dtype=np.float64), mask=True)
-        new_data[mask] = np.squeeze(cube.data)
-    elif len(np.squeeze(cube.data).shape) > 1:
-        # Iterate over earlier dimensions.
-        new_data = np.ma.MaskedArray(np.zeros(new_shape, dtype=np.float64), mask=True)
-        for indices in product(*(range(l) for l in cube.shape[:-1])):
-            sel = (*indices, slice(None))
-            new_data[sel][mask] = cube.data[sel]
-    else:
-        raise ValueError(f"Invalid cube shape {cube.shape}")
-
-    # XXX: Assumes more than 1 lat, lon coord, and destroys other dimensions (except
-    # time, if applicable).
-    new_data = np.squeeze(new_data)
-
-    n_dim = len(new_data.shape)
-    lat_dim = n_dim - 2
-    lon_dim = n_dim - 1
-
-    time_coord_and_dims = []
-    if cube.coords(temporal_dim) and cube.coord_dims(temporal_dim):
-        time_coord_and_dims.append(
-            (cube.coord(temporal_dim), cube.coord_dims(temporal_dim)[0])
-        )
-
-    new_cube = iris.cube.Cube(
-        new_data,
-        dim_coords_and_dims=time_coord_and_dims
-        + [
-            (
-                iris.coords.DimCoord(
-                    grid_lats, standard_name="latitude", units="degrees"
-                ),
-                lat_dim,
-            ),
-            (
-                iris.coords.DimCoord(
-                    grid_lons, standard_name="longitude", units="degrees"
-                ),
-                lon_dim,
-            ),
-        ],
-    )
-
-    new_cube.metadata = cube.metadata
-    return new_cube
 
 
 def collapse_cube_dim(cube, collapse_dim):
