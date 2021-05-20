@@ -7,6 +7,7 @@ import numpy as np
 from joblib import Memory
 from numba import njit
 from sklearn.model_selection import train_test_split
+from wildfires.utils import in_360_longitude_system
 
 memory = Memory(".cache", verbose=0)
 
@@ -102,6 +103,13 @@ pft_acronyms[PFTs.VEG13_ALL] = tuple(
 )
 
 
+def convert_longitudes(longitudes):
+    """Convert longitudes between the [-180, 180] and [0, 360] systems."""
+    if in_360_longitude_system(longitudes):
+        return ((np.asarray(longitudes) + 180) % 360) - 180
+    return np.asarray(longitudes) % 360
+
+
 def get_mm_indices(master_mask):
     mm_valid_indices = np.where(~master_mask.ravel())[0]
     mm_valid_train_indices, mm_valid_val_indices = train_test_split(
@@ -155,23 +163,23 @@ def find_gridpoint(land_lat, land_lon, grid_lats, grid_lons):
 
 
 @memory.cache
-def get_grid_mask(mask, orig_lats, orig_lons, grid_lats, grid_lons):
-    """Calculate mask to transition from one grid to another.
-
-    Note:
-        This probably relies on the contiguity structure of the arrays.
-
-    """
-    mask[
-        ...,
+def get_1d_to_2d_indices(orig_lats, orig_lons, grid_lats, grid_lons):
+    """Calculate indices to transition between 1D ('orig') and 2D grid."""
+    if in_360_longitude_system(orig_lons) or in_360_longitude_system(grid_lons):
+        if not in_360_longitude_system(orig_lons) and in_360_longitude_system(
+            grid_lons
+        ):
+            raise ValueError(
+                "Both longitudes must be in either [-180, 180] or [0, 360]."
+            )
+    return (
         np.rint((orig_lats - grid_lats[0]) / (grid_lats[1] - grid_lats[0])).astype(
-            "int64"
+            np.int64
         ),
         np.rint((orig_lons - grid_lons[0]) / (grid_lons[1] - grid_lons[0])).astype(
-            "int64"
+            np.int64
         ),
-    ] = True
-    return mask
+    )
 
 
 @njit

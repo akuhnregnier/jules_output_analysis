@@ -64,7 +64,7 @@ dependencies:
   - xgboost>=1.0.2
   - pip:
     - git+https://github.com/akuhnregnier/ALEPython.git@working#egg=alepython
-    - git+https://github.com/akuhnregnier/clean_ipynb.git@working#egg=clean_ipynb
+    - git+https://github.com/akuhnregnier/clean_ipynb.git@0.3.2#egg=clean_ipynb
     - git+https://github.com/akuhnregnier/era5analysis.git@master#egg=era5analysis
     - git+https://github.com/akuhnregnier/jupyter-notebook-tools.git@master#egg=jupyter-notebook-tools
     - git+https://github.com/christophM/rulefit.git@master#egg=rulefit

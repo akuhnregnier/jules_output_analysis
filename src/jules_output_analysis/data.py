@@ -13,7 +13,7 @@ from wildfires.data import (
 )
 from wildfires.utils import get_centres, get_land_mask, match_shape
 
-from .utils import find_min_error, get_grid_mask
+from .utils import find_min_error, get_1d_to_2d_indices
 
 dummy_lat_lon_cube = partial(dummy_lat_lon_cube, monthly=True)
 
@@ -63,7 +63,12 @@ def get_climatology_cube(cube):
 
 
 def cube_1d_to_2d(cube, temporal_dim="time", latitudes=None, longitudes=None):
-    """Convert JULES output on 1D grid to 2D grid."""
+    """Convert JULES output on 1D grid to 2D grid.
+
+    the output `iris.cube.Cube` will be on an N96e grid with latitudes `n96e_lats` and
+    longitudes `n96e_lons`.
+
+    """
     land_grid_coord = -1  # The last axis is associated with the spatial domain.
 
     if latitudes is not None or longitudes is not None:
@@ -114,8 +119,7 @@ def cube_1d_to_2d(cube, temporal_dim="time", latitudes=None, longitudes=None):
     else:
         grid_lons = grid_lons2
 
-    mask = get_grid_mask(
-        np.zeros((n_lat, n_lon), dtype=np.bool_),
+    indices_1d_to_2d = get_1d_to_2d_indices(
         orig_lats,
         orig_lons,
         grid_lats,
@@ -124,14 +128,16 @@ def cube_1d_to_2d(cube, temporal_dim="time", latitudes=None, longitudes=None):
 
     if len(np.squeeze(cube.data).shape) == 1:
         # Simply assign based on the mask.
-        new_data = np.ma.MaskedArray(np.zeros_like(mask, dtype=np.float64), mask=True)
-        new_data[mask] = np.squeeze(cube.data)
+        new_data = np.ma.MaskedArray(
+            np.zeros((n_lat, n_lon), dtype=np.float64), mask=True
+        )
+        new_data[indices_1d_to_2d] = np.squeeze(cube.data)
     elif len(np.squeeze(cube.data).shape) > 1:
         # Iterate over earlier dimensions.
         new_data = np.ma.MaskedArray(np.zeros(new_shape, dtype=np.float64), mask=True)
-        for indices in product(*(range(l) for l in cube.shape[:-1])):
+        for indices in product(*(range(s) for s in cube.shape[:-1])):
             sel = (*indices, slice(None))
-            new_data[sel][mask] = cube.data[sel]
+            new_data[sel][indices_1d_to_2d] = cube.data[sel]
     else:
         raise ValueError(f"Invalid cube shape {cube.shape}")
 
