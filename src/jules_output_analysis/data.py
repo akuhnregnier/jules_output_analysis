@@ -283,3 +283,12 @@ def frac_weighted_mean(cube_2d, frac_cube, n_pfts=13):
         f"Expected shape: {(pft_cube_2d.shape[0], pft_cube_2d.shape[2], pft_cube_2d.shape[3])}, got shape: {agg_data_2d.shape}."
     )
     return agg_data_2d
+
+
+def get_1d_data_cube(data, lats, lons):
+    # 1D JULES land points only.
+    assert data.shape == (7771,)
+    cube = iris.cube.Cube(data[np.newaxis])
+    cube.add_aux_coord(lats, data_dims=(0, 1))
+    cube.add_aux_coord(lons, data_dims=(0, 1))
+    return cube[0]
