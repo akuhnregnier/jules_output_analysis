@@ -76,8 +76,8 @@ def cube_1d_to_2d(cube, temporal_dim="time", latitudes=None, longitudes=None):
         orig_lats = latitudes
         orig_lons = longitudes
     else:
-        orig_lats = cube.coord("latitude").points.data.ravel()
-        orig_lons = cube.coord("longitude").points.data.ravel()
+        orig_lats = np.ma.getdata(cube.coord("latitude").points).ravel()
+        orig_lons = np.ma.getdata(cube.coord("longitude").points).ravel()
 
     lat_step = np.unique(np.diff(np.sort(orig_lats)))[1]
     lon_step = np.unique(np.diff(np.sort(orig_lons)))[1]
@@ -286,9 +286,19 @@ def frac_weighted_mean(cube_2d, frac_cube, n_pfts=13):
 
 
 def get_1d_data_cube(data, lats, lons):
-    # 1D JULES land points only.
-    assert data.shape == (7771,)
-    cube = iris.cube.Cube(data[np.newaxis])
-    cube.add_aux_coord(lats, data_dims=(0, 1))
-    cube.add_aux_coord(lons, data_dims=(0, 1))
-    return cube[0]
+    if len(data.shape) == 2:
+        # Aux dim & 1D JULES land points.
+        assert data.shape[1] == 7771
+        cube = iris.cube.Cube(np.expand_dims(data, 1))
+        cube.add_aux_coord(lats, data_dims=(1, 2))
+        cube.add_aux_coord(lons, data_dims=(1, 2))
+        return cube[:, 0]
+    elif len(data.shape) == 1:
+        # 1D JULES land points only.
+        assert data.shape == (7771,)
+        cube = iris.cube.Cube(data[np.newaxis])
+        cube.add_aux_coord(lats, data_dims=(0, 1))
+        cube.add_aux_coord(lons, data_dims=(0, 1))
+        return cube[0]
+    else:
+        raise ValueError(f"Unsupported data shape: {data.shape}.")
