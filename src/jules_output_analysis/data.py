@@ -189,6 +189,20 @@ def cube_1d_to_2d(cube, temporal_dim="time", latitudes=None, longitudes=None):
     )
 
 
+def load_lat_lon_coords(filename):
+    raw_cubes = iris.load_raw(filename)
+    lat = raw_cubes.extract_cube(constraint=iris.Constraint(name="latitude"))
+    lon = raw_cubes.extract_cube(constraint=iris.Constraint(name="longitude"))
+
+    lat_coord = iris.coords.AuxCoord(
+        lat.data, standard_name="latitude", units="degrees"
+    )
+    lon_coord = iris.coords.AuxCoord(
+        lon.data, standard_name="longitude", units="degrees"
+    )
+    return lat_coord, lon_coord
+
+
 def _process_jules_cube(cube, land_mask, n_pfts, frac_cube_shape):
     cube_2d = cube_1d_to_2d(cube)
 
@@ -221,7 +235,14 @@ def _process_jules_cube(cube, land_mask, n_pfts, frac_cube_shape):
 
 
 def load_jules_data(
-    files, variables, land_mask=True, n_pfts=13, frac_cube=None, single=False
+    files,
+    variables,
+    land_mask=True,
+    n_pfts=13,
+    frac_cube=None,
+    single=False,
+    lat_coord=None,
+    lon_coord=None,
 ):
     """Load JULES output into 2D cubes.
 
@@ -241,6 +262,13 @@ def load_jules_data(
     cubes = homogenise_time_coordinate(
         iris.load(files, constraints=variables)
     ).concatenate()
+
+    if lat_coord is not None:
+        for cube in cubes:
+            cube.add_aux_coord(lat_coord, (len(cube.shape) - 2, len(cube.shape) - 1))
+    if lon_coord is not None:
+        for cube in cubes:
+            cube.add_aux_coord(lon_coord, (len(cube.shape) - 2, len(cube.shape) - 1))
 
     proc_cubes = iris.cube.CubeList(
         [
