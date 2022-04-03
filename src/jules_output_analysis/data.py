@@ -313,20 +313,27 @@ def frac_weighted_mean(cube_2d, frac_cube, n_pfts=13):
     return agg_data_2d
 
 
-def get_1d_data_cube(data, lats, lons):
-    if len(data.shape) == 2:
-        # Aux dim & 1D JULES land points.
-        assert data.shape[1] == 7771
-        cube = iris.cube.Cube(np.expand_dims(data, 1))
-        cube.add_aux_coord(lats, data_dims=(1, 2))
-        cube.add_aux_coord(lons, data_dims=(1, 2))
-        return cube[:, 0]
-    elif len(data.shape) == 1:
+def get_1d_data_cube(data, lats, lons, dim_0_dim_coord=None):
+    N = len(data.shape)
+    if N == 1:
+        assert dim_0_dim_coord is None
         # 1D JULES land points only.
         assert data.shape == (7771,)
         cube = iris.cube.Cube(data[np.newaxis])
         cube.add_aux_coord(lats, data_dims=(0, 1))
         cube.add_aux_coord(lons, data_dims=(0, 1))
         return cube[0]
+    elif N in (2, 3):
+        # Aux dim & 1D JULES land points.
+        # E.g. time, aux dim (i.e. PFT) & 1D JULES land points.
+        assert data.shape[N - 1] == 7771
+        cube = iris.cube.Cube(np.expand_dims(data, N - 1))
+        cube.add_aux_coord(lats, data_dims=(N - 1, N))
+        cube.add_aux_coord(lons, data_dims=(N - 1, N))
+        if dim_0_dim_coord is not None:
+            cube.add_dim_coord(dim_0_dim_coord, data_dim=0)
+        final_slices = [slice(None)] * (N + 1)
+        final_slices[-2] = 0
+        return cube[tuple(final_slices)]
     else:
         raise ValueError(f"Unsupported data shape: {data.shape}.")
